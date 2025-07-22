@@ -1,0 +1,7 @@
+.venv/
+data/
+models/train*
+
+yolo_scripts/runs/
+yolo_scripts/*.pt
+__pycache__/
