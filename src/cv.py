@@ -29,7 +29,7 @@ def detect_grid_contour(image):
 
     contours, _ = cv2.findContours(dilated, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-    min_area, max_area = 200000, 280000
+    min_area, max_area = 40000, 280000
     for cnt in sorted(contours, key=cv2.contourArea, reverse=True):
         area = cv2.contourArea(cnt)
         if min_area < area < max_area:
@@ -114,7 +114,7 @@ def tune_contour_grid(image_path):
 
     print(f"🔍 Found {len(contours)} contours. Press SPACE to step through, ESC to exit.")
 
-    min_area, max_area = 200000, 280000
+    min_area, max_area = 40000, 280000
 
     for i, cnt in enumerate(sorted(contours, key=cv2.contourArea, reverse=True)):
         area = cv2.contourArea(cnt)

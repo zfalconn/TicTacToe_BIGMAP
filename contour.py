@@ -18,7 +18,8 @@ def warp_from_contour(image, contour, size=300):
     return cv2.warpPerspective(image, M, (size, size))
 
 def tune_contour_grid(image_path):
-    image = cv2.imread(image_path)
+    cap = cv2.VideoCapture(0)
+    ret, image = cap.read()
     if image is None:
         print("❌ Image not found.")
         return
@@ -43,7 +44,7 @@ def tune_contour_grid(image_path):
     print(f"🔍 Found {len(contours)} contours. Press SPACE to step through, ESC to exit.")
 
     # Area range for valid grid detection
-    min_area = 200000
+    min_area = 40000
     max_area = 280000
 
     for i, cnt in enumerate(sorted(contours, key=cv2.contourArea, reverse=True)):
