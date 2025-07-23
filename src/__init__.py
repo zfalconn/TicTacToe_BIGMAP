@@ -1,0 +1,1 @@
+from .bigmap_robot_opcua.robot.Yaskawa_YRC1000_OPCUA_client import Yaskawa_YRC1000

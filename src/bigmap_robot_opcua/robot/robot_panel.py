@@ -1,5 +1,5 @@
 import panel as pn
-from Yaskawa_YRC1000_OPCUA_client import Yaskawa_YRC1000
+from .Yaskawa_YRC1000_OPCUA_client import Yaskawa_YRC1000
 
 class RobotPanel:
     def __init__(self,robot_object:Yaskawa_YRC1000):
