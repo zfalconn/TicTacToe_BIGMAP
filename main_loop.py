@@ -20,7 +20,9 @@ index_to_robot_job = {
 
 other_job = {
     "home_to_play": 'TICTACTOE_X0_HOME_PLAY',
-    "play_to_home": 'TICTACTOE_X0_PLAY_HOME'
+    "play_to_home": 'TICTACTOE_X0_PLAY_HOME',
+    "robot_win": 'TICTACTOE_WIN',
+    "robot_lose": 'TICTACTOE_LOOSE'
 }
 
 
@@ -92,7 +94,12 @@ def play_round(robot):
 
                 if check_win(board, 'O'):
                     print("🎉 Player wins!")
+                    robot.start_job(other_job["robot_lose"], True)
                     break
+                if check_win(board, 'X'):
+                        print("🏆 Robot wins!")
+                        robot.start_job(other_job["robot_win"], True)
+                        break
                 elif ' ' not in board:
                     print("🤝 It's a draw!")
                     break
@@ -106,7 +113,7 @@ def play_round(robot):
                 print(robot.start_job(index_to_robot_job[best_move], block=True))
                 print("🦾 Robot moved.")
 
-                time.sleep(1)
+                time.sleep(0.5)
 
                 # Re-capture board to check win condition for robot
                 ret2, frame2 = cap.read()
@@ -117,6 +124,7 @@ def play_round(robot):
 
                     if check_win(new_board, 'X'):
                         print("🏆 Robot wins!")
+                        robot.start_job(other_job["robot_win"], True)
                         break
                     elif ' ' not in new_board:
                         print("🤝 It's a draw!")
