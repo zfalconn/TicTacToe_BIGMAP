@@ -1,8 +1,9 @@
 import cv2
 from src.cv import capture_frame, extract_board_image, classify_board_yolo, yolo_model
-from src.game_logic import find_best_move
+from src.game_logic import select_move
 from src.bigmap_robot_opcua.robot.Yaskawa_YRC1000_OPCUA_client import Yaskawa_YRC1000
 import time
+import sys
 
 index_to_position = {
     0: 1, 1: 2, 2: 3,
@@ -21,6 +22,43 @@ other_job = {
     "play_to_home" : 'TICTACTOE_X0_PLAY_HOME'
 }
 
+def wait_for_user_to_start(robot, job_name: str) -> bool:
+    """
+    Prompt user to start the game and trigger robot move to play position if ready.
+    
+    Args:
+        robot: Robot interface object with method `start_job(job_name, blocking=True)`
+        job_name (str): Name of the job to start (e.g., 'TICTACTOE_X0_HOME_PLAY')
+    
+    Returns:
+        bool: True if the game should start, False if user cancelled
+    """
+    while True:
+        user_start = input("Ready to play? (Y/N): ").strip().lower()
+        if user_start == "y":
+            print(robot.start_job(job_name, True))
+            return True
+        elif user_start == "n":
+            print(robot.set_servo(False))
+            robot.stop_communication()
+            print("Program ended. Robot disconnected.")
+            print("Program terminated by user.")
+            return False
+        else:
+            print("Invalid input. Please enter 'Y' or 'N'.")
+
+def get_user_difficulty():
+    while True:
+        try:
+            difficulty = int(input("Select difficulty level (1: Easy, 2: Medium, 3: Hard): "))
+            if difficulty in [1, 2, 3]:
+                return difficulty
+            else:
+                print("Invalid input. Please enter 1, 2, or 3.")
+        except ValueError:
+            print("Invalid input. Please enter a numeric value.")
+
+
 def loop_live():
     
     try: 
@@ -32,23 +70,20 @@ def loop_live():
         print(robot.set_servo(True))
         ### END INIT ###
 
-        # WAIT FOR GO AHEAD FROM USER
-        while True:
-            user_start = input("Ready to play?: (Y/N)")
-            if user_start.lower() == "y":
-                print(robot.start_job(other_job["home_to_play"], True)) #MAKE ROBOT GO TO PLAY POSITION
-                break
-            elif user_start.lower() == "n":
-                print("Program terminated by user.")
-                break
-            else:
-                print("Please try again with valid input: Y for yes and N for no.")
-        
+        ### WAIT FOR GO AHEAD FROM USER ###
+        if not wait_for_user_to_start(robot, other_job["home_to_play"]): #TRUE if YES, FALSE if NO
+            sys.exit() #EARLY SCRIPT TERMINATION
+        ### END ### 
+
+        ### SELECT DIFFICULTY ###
+        difficulty_level = get_user_difficulty()
+        ### END ###
+
         ### CAM INIT ###
         print("🔄 Starting webcam Tic Tac Toe loop...")
         print("➡️  Press 'c' to capture and analyze the board")
         print("❌ Press 'q' to quit")
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
         ### END INIT ###
 
         ### CV CONTROL LOOP ###
@@ -80,7 +115,7 @@ def loop_live():
                     for i in range(0, 9, 3):
                         print(board[i:i+3])
 
-                    best_move = find_best_move(board)
+                    best_move = select_move(board, difficulty=difficulty_level)
                     if best_move == -1:
                         print("✅ Game over or no valid moves.")
                     else:
@@ -105,11 +140,6 @@ def loop_live():
 
     except Exception as e:
         print(f"ERROR: {e}")
-    except user_start == "n":
-        print(robot.set_servo(False))
-        robot.stop_communication()
-        print("Program ended. Robot disconnected.")
-        # pass
     finally:
         print(robot.set_servo(False))
         robot.stop_communication()
