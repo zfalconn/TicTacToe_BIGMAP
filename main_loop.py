@@ -1,9 +1,10 @@
 import cv2
-from src.cv import capture_frame, extract_board_image, classify_board_yolo, yolo_model
-from src.game_logic import select_move
-from src.bigmap_robot_opcua.robot.Yaskawa_YRC1000_OPCUA_client import Yaskawa_YRC1000
 import time
 import sys
+from src.cv import extract_board_image, classify_board_yolo, yolo_model
+from src.game_logic import select_move, check_win
+from src.bigmap_robot_opcua.robot.Yaskawa_YRC1000_OPCUA_client import Yaskawa_YRC1000
+
 
 index_to_position = {
     0: 1, 1: 2, 2: 3,
@@ -18,21 +19,12 @@ index_to_robot_job = {
 }
 
 other_job = {
-    "home_to_play" : 'TICTACTOE_X0_HOME_PLAY',
-    "play_to_home" : 'TICTACTOE_X0_PLAY_HOME'
+    "home_to_play": 'TICTACTOE_X0_HOME_PLAY',
+    "play_to_home": 'TICTACTOE_X0_PLAY_HOME'
 }
 
+
 def wait_for_user_to_start(robot, job_name: str) -> bool:
-    """
-    Prompt user to start the game and trigger robot move to play position if ready.
-    
-    Args:
-        robot: Robot interface object with method `start_job(job_name, blocking=True)`
-        job_name (str): Name of the job to start (e.g., 'TICTACTOE_X0_HOME_PLAY')
-    
-    Returns:
-        bool: True if the game should start, False if user cancelled
-    """
     while True:
         user_start = input("Ready to play? (Y/N): ").strip().lower()
         if user_start == "y":
@@ -41,11 +33,11 @@ def wait_for_user_to_start(robot, job_name: str) -> bool:
         elif user_start == "n":
             print(robot.set_servo(False))
             robot.stop_communication()
-            print("Program ended. Robot disconnected.")
             print("Program terminated by user.")
             return False
         else:
             print("Invalid input. Please enter 'Y' or 'N'.")
+
 
 def get_user_difficulty():
     while True:
@@ -59,91 +51,114 @@ def get_user_difficulty():
             print("Invalid input. Please enter a numeric value.")
 
 
+def display_board(board):
+    print("\n📋 Current Board:")
+    for i in range(0, 9, 3):
+        print(board[i:i + 3])
+
+
+def play_round(robot):
+    cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+
+    if not cap.isOpened():
+        print("❌ Could not open camera. Exiting.")
+        return
+
+    difficulty_level = get_user_difficulty()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("❌ Failed to read from webcam")
+            break
+
+        display = frame.copy()
+        cv2.putText(display, "Press 'c' to capture, 'q' to quit", (20, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        cv2.imshow("Live Camera", display)
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            print("👋 Exiting game loop...")
+            robot.start_job(other_job["play_to_home"], True)
+            break
+
+        elif key == ord('c'):
+            try:
+                print("📸 Capturing and analyzing board...")
+                board_img = extract_board_image(frame)
+                board = classify_board_yolo(board_img, yolo_model)
+                display_board(board)
+
+                if check_win(board, 'O'):
+                    print("🎉 Player wins!")
+                    break
+                elif ' ' not in board:
+                    print("🤝 It's a draw!")
+                    break
+
+                best_move = select_move(board, difficulty_level)
+                if best_move == -1:
+                    print("✅ No valid moves left.")
+                    break
+
+                print(f"🔷 Robot should draw 'X' at position: {index_to_position[best_move]}")
+                print(robot.start_job(index_to_robot_job[best_move], block=True))
+                print("🦾 Robot moved.")
+
+                time.sleep(1)
+
+                # Re-capture board to check win condition for robot
+                ret2, frame2 = cap.read()
+                if ret2:
+                    board_img2 = extract_board_image(frame2)
+                    new_board = classify_board_yolo(board_img2, yolo_model)
+                    display_board(new_board)
+
+                    if check_win(new_board, 'X'):
+                        print("🏆 Robot wins!")
+                        break
+                    elif ' ' not in new_board:
+                        print("🤝 It's a draw!")
+                        break
+
+                print("➡️ Press 'c' to continue, or 'q' to quit.")
+
+            except Exception as e:
+                print("🚨 Error during board capture or move:", str(e))
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
 def loop_live():
-    
-    try: 
-        ### ROBOT INIT ###
+    try:
         robot_url = "opc.tcp://192.168.1.20:16448"
         robot = Yaskawa_YRC1000(robot_url)
-        print(" >> Robot initialized <<")
+        print("🤖 Robot initialized.")
         print(robot.get_available_jobs())
         print(robot.set_servo(True))
-        ### END INIT ###
 
-        ### WAIT FOR GO AHEAD FROM USER ###
-        if not wait_for_user_to_start(robot, other_job["home_to_play"]): #TRUE if YES, FALSE if NO
-            sys.exit() #EARLY SCRIPT TERMINATION
-        ### END ### 
+        if not wait_for_user_to_start(robot, other_job["home_to_play"]):
+            sys.exit()
 
-        ### SELECT DIFFICULTY ###
-        difficulty_level = get_user_difficulty()
-        ### END ###
-
-        ### CAM INIT ###
-        print("🔄 Starting webcam Tic Tac Toe loop...")
-        print("➡️  Press 'c' to capture and analyze the board")
-        print("❌ Press 'q' to quit")
-        cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
-        ### END INIT ###
-
-        ### CV CONTROL LOOP ###
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                print("❌ Failed to read from webcam")
+            play_round(robot)
+
+            again = input("Play again? (Y/N): ").strip().lower()
+            if again != 'y':
                 break
+            print("Restarting game...")
 
-            # Show live preview
-            display = frame.copy()
-            cv2.putText(display, "Press 'c' to analyze, 'q' to quit", (20, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
-            cv2.imshow("Live Camera", display)
-
-            key = cv2.waitKey(1) & 0xFF
-            if key == ord('q'):
-                print("👋 Exiting...")
-                robot.start_job(other_job["play_to_home"], True)
-                break
-            elif key == ord('c'):
-                print("📸 Capturing frame and analyzing...")
-                try:
-                    # Extract and classify board from current frame
-                    board_img = extract_board_image(frame)
-                    board = classify_board_yolo(board_img, yolo_model)
-
-                    print("\n📋 Detected Board:")
-                    for i in range(0, 9, 3):
-                        print(board[i:i+3])
-
-                    best_move = select_move(board, difficulty=difficulty_level)
-                    if best_move == -1:
-                        print("✅ Game over or no valid moves.")
-                    else:
-                        print(f"🔷 Robot should draw 'X' at position: {index_to_position[best_move]}")
-                        ### PERFORM MOVEMENT ###
-                        print(robot.start_job(index_to_robot_job[best_move], block=True))
-                        
-                        print(" >> ROBOT MOVED! << ")
-
-
-
-                    print("\n➡️  Press 'c' again to capture a new board, or 'q' to quit.")
-                    time.sleep(0.5)
-
-                except Exception as e:
-                    print("🚨 Error:", str(e))
-
-        ### END LOOP ###
-
-        cap.release()
-        cv2.destroyAllWindows()
+        print(robot.start_job(other_job["play_to_home"], True))
 
     except Exception as e:
-        print(f"ERROR: {e}")
+        print(f"🔥 ERROR: {e}")
+
     finally:
         print(robot.set_servo(False))
         robot.stop_communication()
-        print("Program ended. Robot disconnected.")
+        print("Robot disconnected. Program terminated.")
 
 
 if __name__ == "__main__":
